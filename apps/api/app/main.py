@@ -11,7 +11,7 @@ import phonenumbers
 from argon2 import PasswordHasher
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, update
 from app.antiabuse import fingerprint, rate_limit
 from sqlalchemy.orm import Session
@@ -66,7 +66,10 @@ class AppealInput(BaseModel):
     number: str
     text: str = Field(min_length=10, max_length=1500)
     review_id: int | None = None
-    contact_email: str | None = Field(default=None, max_length=254)
+    contact_email: EmailStr | None = Field(
+        default=None,
+        max_length=254,
+    )
     turnstile_token: str = Field(min_length=1)
 
 
@@ -550,10 +553,6 @@ def submit_appeal(
     e164, _ = normalize_number(payload.number)
 
     email = payload.contact_email
-    if email and not re.fullmatch(
-        r"[^@\s]+@[^@\s]+\.[^@\s]+", email
-    ):
-        raise HTTPException(422, "Invalid contact email")
 
     db.add(Appeal(
         phone_e164=e164,
