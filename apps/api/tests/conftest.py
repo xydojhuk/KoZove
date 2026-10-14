@@ -3,17 +3,15 @@ import os
 import uuid
 
 import pytest
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
-
 
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+psycopg://test:test@127.0.0.1:5432/kozove_test",
 )
-os.environ.setdefault("APP_VERSION", "0.1.3")
+os.environ.setdefault("APP_VERSION", "0.2.0-alpha")
 os.environ.setdefault(
     "ADMIN_PASSWORD_HASH",
     "not-used-in-tests",
@@ -68,11 +66,16 @@ def pg_session_factory():
     engine = create_engine(
         url,
         connect_args={
-            "options": f"-csearch_path={schema},public"
+            "options": f"-csearch_path={schema}"
         },
     )
 
     try:
+        with engine.connect() as conn:
+            assert conn.scalar(
+                text("SELECT current_schema()")
+            ) == schema
+
         Base.metadata.create_all(engine)
 
         yield sessionmaker(
@@ -84,9 +87,7 @@ def pg_session_factory():
 
         with admin_engine.begin() as conn:
             conn.execute(
-                text(
-                    f'DROP SCHEMA "{schema}" CASCADE'
-                )
+                text(f'DROP SCHEMA "{schema}" CASCADE')
             )
 
         admin_engine.dispose()
