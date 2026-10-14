@@ -1,0 +1,88 @@
+
+name: kozove
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  api:
+    build: ./apps/api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      APP_VERSION: ${APP_VERSION}
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET} 
+    command: >-
+      sh -c 'alembic upgrade head && exec uvicorn app.entrypoint:app --host 0.0.0.0 --port 8000 --reload --reload-dir /code/app --no-access-log'
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/app
+          target: /code/app
+        - action: sync
+          path: ./apps/api/alembic
+          target: /code/alembic
+        - action: rebuild
+          path: ./apps/api/requirements.txt
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    environment:
+      NUXT_API_INTERNAL_URL: http://api:8000
+      NUXT_PUBLIC_TURNSTILE_SITEKEY: ${TURNSTILE_SITEKEY}
+      NUXT_PUBLIC_GITHUB_URL: ${GITHUB_URL}
+      NUXT_PUBLIC_CONTACT_EMAIL: ${CONTACT_EMAIL}
+      NUXT_PUBLIC_APP_VERSION: ${APP_VERSION}
+      NUXT_PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "0.0.0.0:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web/app
+          target: /code/app
+        - action: sync
+          path: ./apps/web/server
+          target: /code/server
+        - action: sync
+          path: ./apps/web/public
+          target: /code/public
+        - action: sync+restart
+          path: ./apps/web/nuxt.config.ts
+          target: /code/nuxt.config.ts
+        - action: rebuild
+          path: ./apps/web/package.json
+        - action: rebuild
+          path: ./apps/web/package-lock.json
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
