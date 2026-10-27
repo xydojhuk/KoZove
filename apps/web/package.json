@@ -10,7 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "@lucide/vue": "^1.56.0",
+    "@lucide/vue": "^1.61.0",
     "@nuxt/fonts": "^1.0.1",
     "nuxt": "^4.6.2",
     "vue": "^3.5.43",
